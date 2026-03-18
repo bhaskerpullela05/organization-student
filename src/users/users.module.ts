@@ -14,31 +14,43 @@ import { JwtModule } from '@nestjs/jwt';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { OtpService } from 'src/otp/otp.service';
 import { EmailService } from 'src/email/email.service';
+import { ExcelSheet } from './entities/excel.entity';
+import { Organization } from './entities/organization.entity';
+import { Tutor } from './entities/tutor.entity';
 
 @Module({
-  imports:[
+  imports: [
     ConfigModule.forRoot({
-      isGlobal:true,
-      envFilePath:['.env'],
+      isGlobal: true,
+      envFilePath: ['.env'],
     }),
     TypeOrmModule.forRootAsync(TypeormAsynConfig),
-    TypeOrmModule.forFeature([Student,Role,Permissions,Lesson,Instructor,Course]),
+    TypeOrmModule.forFeature([
+      Student,
+      Role,
+      Permissions,
+      Lesson,
+      Instructor,
+      Course,
+      ExcelSheet,
+      Organization,
+      Tutor,
+    ]),
     JwtModule.registerAsync({
-      inject:[ConfigService],
-      useFactory:(config:ConfigService)=>({
-        secret:config.getOrThrow<string>('JWT_SECRET'),
-        signOptions:{
-          expiresIn:parseInt(config.getOrThrow<string>('JWT_EXPIRES_IN')),
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: {
+          expiresIn: parseInt(config.getOrThrow<string>('JWT_EXPIRES_IN')),
         },
       }),
     }),
     RedisModule.forRoot({
-      type:'single',
-      url:'redis://localhost:6379',
+      type: 'single',
+      url: 'redis://localhost:6379',
     }),
-
   ],
   controllers: [UsersController],
-  providers: [UsersService,OtpService,EmailService],
+  providers: [UsersService, OtpService, EmailService],
 })
 export class UsersModule {}

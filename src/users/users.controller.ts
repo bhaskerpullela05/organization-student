@@ -10,15 +10,21 @@ import {
   Query,
   Req,
   StreamableFile,
+  UseInterceptors,
+  UploadedFile,
+  Res,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { RegisterDto } from './dto/register.dto';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProduces,
+  ApiResponse,
 } from '@nestjs/swagger';
 import { Student } from './entities/student.entity';
 import { LoginDto } from './dto/login.dto';
@@ -35,6 +41,10 @@ import { RolesGuard } from 'src/guards/role.guard';
 import { Roles } from 'src/decorators/role.decorator';
 import { createReadStream } from 'fs';
 import { join } from 'path';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { AddOrganizationDto } from './dto/add-organization.dto';
+import { AddUserDto } from './dto/add-users.dto';
 
 @Controller('users')
 export class UsersController {
@@ -253,5 +263,66 @@ export class UsersController {
     return new StreamableFile(file, {
       type: 'image/png',
     });
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(UsersGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'upload the excel sheet' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @Post('upload-sheet')
+  async ExcelData(@UploadedFile() file: Express.Multer.File) {
+    return this.usersService.ExcelData(file);
+  }
+  @ApiBearerAuth()
+  @UseGuards(UsersGuard)
+  @Get('export')
+  @ApiOperation({ summary: 'Download users Excel file' })
+  async exportExcel(@Res() res: Response, @Req() req: any) {
+    const buffer = await this.usersService.exportUsersExcel(req.user.sub);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+
+    res.setHeader('Content-Disposition', 'attachment; filename="student.xlsx"');
+
+    res.setHeader('Content-Length', buffer.length);
+
+    return res.end(buffer);
+  }
+
+  @ApiOperation({ summary: 'add organizations here' })
+  @Post('add-organizaton')
+  async AddOrganization(@Body() dto: AddOrganizationDto) {
+    return this.usersService.AddOrganization(dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(UsersGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: 'add tutors here' })
+  @Post('add-tutors')
+  async AddUsers(@Body() dto: AddUserDto, @Req() req: any) {
+    return this.usersService.AddUsers(dto, req.user.id);
+  }
+
+  @ApiOperation({ summary: 'login' })
+  @ApiBody({ type: LoginDto })
+  @Post('login-org')
+  async OrgLogin(@Body() dto: LoginDto) {
+    return this.usersService.OrgLogin(dto);
   }
 }
