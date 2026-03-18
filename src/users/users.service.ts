@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
   Redirect,
   UnauthorizedException,
@@ -11,7 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { RegisterDto } from './dto/register.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Student } from './entities/student.entity';
-import { DataSource, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Role } from './entities/role.entity';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
@@ -38,8 +37,6 @@ type ExcelRow = {
 
 @Injectable()
 export class UsersService {
-  private readonly logger = new Logger(UsersService.name);
-
   constructor(
     @InjectRepository(Student)
     private StudentRepo: Repository<Student>,
@@ -64,9 +61,6 @@ export class UsersService {
     private Emailservice: EmailService,
 
     private Otpservice: OtpService,
-
-    // DataSource gives us full transaction control
-    private readonly dataSource: DataSource,
   ) {}
 
   async Register(dto: RegisterDto) {
@@ -365,64 +359,39 @@ export class UsersService {
     return 'organization added sucessfully';
   }
 
-  /**
-   * Atomically adds a tutor to an organization, respecting the max_limit.
-   *
-   * Uses a DB transaction with a PESSIMISTIC WRITE lock (SELECT … FOR UPDATE)
-   * so that concurrent requests cannot both read count=9 and both insert,
-   * which would bypass the limit.  Only one transaction can hold the write lock
-   * on the organization row at a time.
-   */
   async AddUsers(dto: AddUserDto, id: number) {
-    // Quick duplicate email check BEFORE acquiring locks (cheap, non-critical)
     const Exists = await this.TutorRepo.findOne({
       where: { email: dto.email },
     });
+
     if (Exists) {
       throw new UnauthorizedException('user already exists');
     }
 
-    return await this.dataSource.transaction(async (manager) => {
-      // Lock the organization row → blocks other concurrent transactions
-      const org = await manager.findOne(Organization, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' }, // SELECT … FOR UPDATE
-      });
+    const Organization = await this.OrgRepo.findOne({ where: { id: id } });
+    if (!Organization) {
+      throw new UnauthorizedException('Organization not found');
+    }
 
-      if (!org) {
-        throw new UnauthorizedException('Organization not found');
-      }
-
-      // Re-count inside the transaction (fresh, locked read)
-      const currentCount = await manager.count(Tutor, {
-        where: { organization_id: id },
-      });
-
-      this.logger.log(
-        `AddUsers: org ${id} → used=${currentCount}, max=${org.max_limit}`,
-      );
-
-      if (currentCount >= org.max_limit) {
-        throw new BadRequestException(
-          `Seat limit reached. Max allowed: ${org.max_limit}, currently used: ${currentCount}.`,
-        );
-      }
-
-      const Hashed = await bcrypt.hash(dto.password, 10);
-      const tutor = manager.create(Tutor, {
-        name: dto.name,
-        email: dto.email,
-        password: Hashed,
-        organization_id: id,
-      });
-      await manager.save(tutor);
-
-      const remaining = org.max_limit - (currentCount + 1);
-      return {
-        message: 'Tutor added successfully',
-        seats_remaining: remaining,
-      };
+    const USerCount = await this.TutorRepo.count({
+      where: { organization_id: id },
     });
+
+    if (USerCount >= Organization.max_limit) {
+      throw new BadRequestException(
+        `Adding limit exceeded please contact super admin. Max allowed:${Organization.max_limit}`,
+      );
+    }
+
+    const Hashed = await bcrypt.hash(dto.password, 10);
+    const Users = this.TutorRepo.create({
+      name: dto.name,
+      email: dto.email,
+      password: Hashed,
+      organization_id: id,
+    });
+    await this.TutorRepo.save(Users);
+    return 'Tutor added sucessfully';
   }
 
   async OrgLogin(dto: LoginDto) {
