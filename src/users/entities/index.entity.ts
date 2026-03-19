@@ -6,6 +6,7 @@ import { Organization } from './organization.entity';
 import { Permissions } from './permission.entity';
 import { Role } from './role.entity';
 import { Student } from './student.entity';
+import { Subscription } from './subscription.entity';
 import { Tutor } from './tutor.entity';
 
 const entities = [
@@ -18,6 +19,7 @@ const entities = [
   ExcelSheet,
   Organization,
   Tutor,
+  Subscription,
 ];
 
 export {
@@ -30,6 +32,7 @@ export {
   ExcelSheet,
   Organization,
   Tutor,
+  Subscription,
 };
 
 export default entities;

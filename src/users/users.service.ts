@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Redirect,
@@ -26,6 +27,8 @@ import { Organization } from './entities/organization.entity';
 import { Tutor } from './entities/tutor.entity';
 import { privateDecrypt } from 'crypto';
 import { AddUserDto } from './dto/add-users.dto';
+import { SubscriptionDto } from './dto/subscription.dto';
+import { Subscription } from './entities/subscription.entity';
 
 type ExcelRow = {
   name: string;
@@ -55,6 +58,9 @@ export class UsersService {
 
     @InjectRepository(Tutor)
     private TutorRepo: Repository<Tutor>,
+
+    @InjectRepository(Subscription)
+    private SubscriptionRepo: Repository<Subscription>,
 
     private jwtService: JwtService,
 
@@ -354,8 +360,22 @@ export class UsersService {
       email: dto.email,
       password: Hashed,
       max_limit: dto.max_limit,
+      subscription_id: 1,
     });
     await this.OrgRepo.save(Org);
+
+    const Now = new Date();
+    Now.setDate(Now.getDate() + 30);
+
+    const AddUsers = this.SubscriptionRepo.create({
+      plan_name: 'add_users',
+      max_users: 1,
+      status: 'active',
+      expires_at: Now,
+    });
+
+    await this.SubscriptionRepo.save(AddUsers);
+
     return 'organization added sucessfully';
   }
 
@@ -381,6 +401,27 @@ export class UsersService {
       throw new BadRequestException(
         `Adding limit exceeded please contact super admin. Max allowed:${Organization.max_limit}`,
       );
+    }
+
+    const Isvalid = await this.SubscriptionRepo.findOne({
+      where: { id: Organization.subscription_id },
+      select: ['expires_at'],
+    });
+
+    if (!Isvalid) {
+      throw new NotFoundException('No Subscription found');
+    }
+
+    const Now = new Date();
+    const expirationDate = new Date(Isvalid.expires_at);
+    console.log("Expiration Date:", expirationDate, "Now:", Now);
+
+    if (expirationDate < Now) {
+      await this.SubscriptionRepo.update(
+        { id: Organization.subscription_id },
+        { status: 'expired' },
+      );
+      throw new ForbiddenException('Subscription Expired');
     }
 
     const Hashed = await bcrypt.hash(dto.password, 10);
@@ -421,5 +462,83 @@ export class UsersService {
     console.log(Payload);
 
     return { access_token: Token };
+  }
+
+  async HasSubscription(dto: AddUserDto, id: number) {
+    const IsExists = await this.OrgRepo.findOne({
+      where: { id: id },
+      select: ['subscription_id', 'max_limit'],
+    });
+
+    if (!IsExists) {
+      throw new UnauthorizedException('No token found');
+    }
+
+    const UserCount = await this.TutorRepo.count({
+      where: { organization_id: id },
+    });
+
+    if (UserCount >= IsExists.max_limit) {
+      throw new BadRequestException(
+        `Adding limit exceeded please contact super admin. Max allowed:${IsExists.max_limit}`,
+      );
+    }
+    const Isvalid = await this.SubscriptionRepo.findOne({
+      where: { id: IsExists.subscription_id },
+      select: ['expires_at'],
+    });
+    if (!Isvalid) {
+      throw new NotFoundException('No Subscription  found');
+    }
+
+    const Now = new Date();
+    const expirationDate = new Date(Isvalid.expires_at);
+    console.log(Now, expirationDate);
+
+    if (expirationDate < Now) {
+      await this.SubscriptionRepo.update(
+        { id: IsExists.subscription_id },
+        { status: 'expired' },
+      );
+      throw new ForbiddenException('Subscription Expired');
+    }
+
+    const Hashed = await bcrypt.hash(dto.password, 10);
+    const Users = this.TutorRepo.create({
+      name: dto.name,
+      email: dto.email,
+      password: Hashed,
+      organization_id: id,
+    });
+    await this.TutorRepo.save(Users);
+    return 'Tutor added sucessfully';
+  }
+
+  async AdjustTime(id: number) {
+    const now = new Date();
+
+    const result = await this.SubscriptionRepo.update(
+      { id },
+      { expires_at: now },
+    );
+
+    if (result.affected === 0) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    return 'expiration time changed successfully';
+  }
+
+  async UpdateOrgLimit(id: number, limit: number) {
+    const result = await this.OrgRepo.update(
+      { id },
+      { max_limit: limit },
+    );
+
+    if (result.affected === 0) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    return `Organization limit updated to ${limit} successfully`;
   }
 }

@@ -31,6 +31,9 @@ export class Organization {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
+  @Column()
+  subscription_id: number;
+
   // Inverse relationship: One Organization has Many Tutors
   @OneToMany(() => Tutor, (tutor) => tutor.organization)
   tutors: Tutor[];

@@ -17,6 +17,7 @@ import { EmailService } from 'src/email/email.service';
 import { ExcelSheet } from './entities/excel.entity';
 import { Organization } from './entities/organization.entity';
 import { Tutor } from './entities/tutor.entity';
+import { Subscription } from './entities/subscription.entity';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { Tutor } from './entities/tutor.entity';
       ExcelSheet,
       Organization,
       Tutor,
+      Subscription,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],

@@ -45,6 +45,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { AddOrganizationDto } from './dto/add-organization.dto';
 import { AddUserDto } from './dto/add-users.dto';
+import { SubscriptionDto } from './dto/subscription.dto';
+import { REDIRECT_METADATA } from '@nestjs/common/constants';
 
 @Controller('users')
 export class UsersController {
@@ -324,5 +326,50 @@ export class UsersController {
   @Post('login-org')
   async OrgLogin(@Body() dto: LoginDto) {
     return this.usersService.OrgLogin(dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(UsersGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: 'subscription based acess' })
+  @ApiBody({ type: SubscriptionDto })
+  @Post('subscription')
+  async HasSubscription(@Body() dto: AddUserDto, @Req() req: any) {
+    return this.usersService.HasSubscription(dto, req.user.id);
+  }
+
+  @ApiOperation({ summary: 'adjust time' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'number',
+        },
+      },
+    },
+  })
+  @Patch('adjust-time')
+  async AdjustTime(@Body('id') id: number) {
+    return this.usersService.AdjustTime(id);
+  }
+
+  @ApiOperation({ summary: 'Update Organization Max Limit' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number' },
+        limit: { type: 'number' },
+      },
+      required: ['id', 'limit'],
+    },
+  })
+  @Patch('update-limit')
+  async UpdateOrgLimit(
+    @Body('id') id: number,
+    @Body('limit') limit: number,
+  ) {
+    return this.usersService.UpdateOrgLimit(id, limit);
   }
 }
